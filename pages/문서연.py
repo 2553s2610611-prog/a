@@ -1,225 +1,157 @@
 import streamlit as st
-import pandas as pd
-import plotly.express as px
-from datetime import datetime
+import time
 
 st.set_page_config(
-    page_title="TimeMaster",
-    page_icon="⏰",
-    layout="wide"
+    page_title="Tomato Focus Timer",
+    page_icon="🍅",
+    layout="centered"
 )
 
-# -----------------------
-# 세션 상태 초기화
-# -----------------------
-if "tasks" not in st.session_state:
-    st.session_state.tasks = []
+# ------------------
+# 세션 상태
+# ------------------
+if "running" not in st.session_state:
+    st.session_state.running = False
 
-# -----------------------
-# 함수
-# -----------------------
-def add_task(title, priority):
-    st.session_state.tasks.append({
-        "업무": title,
-        "우선순위": priority,
-        "완료": False,
-        "생성시간": datetime.now().strftime("%Y-%m-%d %H:%M")
-    })
+if "paused" not in st.session_state:
+    st.session_state.paused = False
 
-def calculate_score(total, completed):
-    if total == 0:
-        return 0
+if "mode" not in st.session_state:
+    st.session_state.mode = "집중"
 
-    score = int((completed / total) * 100)
-    return score
+if "remaining_seconds" not in st.session_state:
+    st.session_state.remaining_seconds = 25 * 60
 
-# -----------------------
+if "total_seconds" not in st.session_state:
+    st.session_state.total_seconds = 25 * 60
+
+if "completed_sessions" not in st.session_state:
+    st.session_state.completed_sessions = 0
+
+# ------------------
 # 제목
-# -----------------------
-st.title("⏰ TimeMaster")
-st.caption("업무 관리 + 포모도로 + 생산성 분석")
+# ------------------
+st.title("🍅 Tomato Focus Timer")
+st.caption("집중과 휴식을 반복하는 포모도로 타이머")
 
-# -----------------------
-# 사이드바
-# -----------------------
-with st.sidebar:
-    st.header("➕ 업무 추가")
+# ------------------
+# 설정
+# ------------------
+st.subheader("⚙️ 타이머 설정")
 
-    task_name = st.text_input("업무명")
+focus_minutes = st.number_input(
+    "집중 시간 (분)",
+    min_value=1,
+    max_value=180,
+    value=25
+)
 
-    priority = st.selectbox(
-        "우선순위",
-        ["높음", "보통", "낮음"]
-    )
+break_minutes = st.number_input(
+    "휴식 시간 (분)",
+    min_value=1,
+    max_value=60,
+    value=5
+)
 
-    if st.button("업무 추가"):
-        if task_name.strip():
-            add_task(task_name.strip(), priority)
-            st.success("업무가 추가되었습니다.")
-            st.rerun()
+# ------------------
+# 버튼
+# ------------------
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    if st.button("▶ 시작"):
+        if not st.session_state.running:
+            st.session_state.running = True
+            st.session_state.paused = False
+
+            if st.session_state.remaining_seconds <= 0:
+                st.session_state.mode = "집중"
+                st.session_state.total_seconds = focus_minutes * 60
+                st.session_state.remaining_seconds = focus_minutes * 60
+
+with col2:
+    if st.button("⏸ 일시정지"):
+        st.session_state.paused = True
+
+with col3:
+    if st.button("🔄 초기화"):
+        st.session_state.running = False
+        st.session_state.paused = False
+        st.session_state.mode = "집중"
+        st.session_state.total_seconds = focus_minutes * 60
+        st.session_state.remaining_seconds = focus_minutes * 60
+
+# ------------------
+# 타이머 표시
+# ------------------
+minutes = st.session_state.remaining_seconds // 60
+seconds = st.session_state.remaining_seconds % 60
+
+st.markdown(
+    f"""
+    <div style='text-align:center'>
+        <div style='font-size:120px;'>🍅</div>
+        <div style='font-size:60px;font-weight:bold;'>
+            {minutes:02d}:{seconds:02d}
+        </div>
+        <div style='font-size:30px;color:#ff4b4b'>
+            {st.session_state.mode} 모드
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# ------------------
+# 진행률
+# ------------------
+progress = 1 - (
+    st.session_state.remaining_seconds /
+    st.session_state.total_seconds
+)
+
+progress = max(0, min(progress, 1))
+
+st.progress(progress)
+
+# ------------------
+# 통계
+# ------------------
+st.subheader("🏆 오늘의 기록")
+
+st.metric(
+    "완료한 포모도로",
+    st.session_state.completed_sessions
+)
+
+# ------------------
+# 타이머 동작
+# ------------------
+if (
+    st.session_state.running
+    and not st.session_state.paused
+):
+
+    time.sleep(1)
+
+    st.session_state.remaining_seconds -= 1
+
+    if st.session_state.remaining_seconds <= 0:
+
+        if st.session_state.mode == "집중":
+
+            st.session_state.completed_sessions += 1
+
+            st.session_state.mode = "휴식"
+
+            st.session_state.total_seconds = break_minutes * 60
+            st.session_state.remaining_seconds = break_minutes * 60
+
         else:
-            st.warning("업무명을 입력하세요.")
 
-    st.divider()
+            st.session_state.mode = "집중"
 
-    st.header("🍅 포모도로 타이머")
+            st.session_state.total_seconds = focus_minutes * 60
+            st.session_state.remaining_seconds = focus_minutes * 60
 
-    pomodoro_minutes = st.number_input(
-        "집중 시간(분)",
-        min_value=1,
-        max_value=120,
-        value=25
-    )
-
-    st.info(f"권장 집중시간: {pomodoro_minutes}분")
-
-# -----------------------
-# 업무 데이터
-# -----------------------
-tasks = st.session_state.tasks
-
-total_tasks = len(tasks)
-completed_tasks = sum(task["완료"] for task in tasks)
-
-progress = (
-    completed_tasks / total_tasks * 100
-    if total_tasks > 0 else 0
-)
-
-score = calculate_score(
-    total_tasks,
-    completed_tasks
-)
-
-# -----------------------
-# KPI
-# -----------------------
-col1, col2, col3, col4 = st.columns(4)
-
-col1.metric("전체 업무", total_tasks)
-col2.metric("완료 업무", completed_tasks)
-col3.metric("진행률", f"{progress:.1f}%")
-col4.metric("생산성 점수", score)
-
-st.progress(progress / 100 if progress > 0 else 0)
-
-# -----------------------
-# 생산성 평가
-# -----------------------
-if score >= 90:
-    st.success("🏆 매우 우수")
-elif score >= 70:
-    st.info("🚀 우수")
-elif score >= 50:
-    st.warning("🙂 보통")
-else:
-    st.error("📈 개선 필요")
-
-st.divider()
-
-# -----------------------
-# 업무 목록
-# -----------------------
-st.subheader("📋 오늘의 업무")
-
-if not tasks:
-    st.info("등록된 업무가 없습니다.")
-else:
-    delete_index = None
-
-    for idx, task in enumerate(tasks):
-
-        col1, col2, col3, col4 = st.columns(
-            [5, 2, 2, 1]
-        )
-
-        with col1:
-            st.write(task["업무"])
-
-        with col2:
-            st.write(task["우선순위"])
-
-        with col3:
-            checked = st.checkbox(
-                "완료",
-                value=task["완료"],
-                key=f"check_{idx}"
-            )
-
-            st.session_state.tasks[idx]["완료"] = checked
-
-        with col4:
-            if st.button(
-                "❌",
-                key=f"delete_{idx}"
-            ):
-                delete_index = idx
-
-    if delete_index is not None:
-        st.session_state.tasks.pop(delete_index)
-        st.rerun()
-
-# -----------------------
-# 분석 영역
-# -----------------------
-st.divider()
-
-st.subheader("📊 우선순위 분석")
-
-if tasks:
-
-    df = pd.DataFrame(tasks)
-
-    priority_count = (
-        df["우선순위"]
-        .value_counts()
-        .reset_index()
-    )
-
-    priority_count.columns = [
-        "우선순위",
-        "개수"
-    ]
-
-    fig = px.bar(
-        priority_count,
-        x="우선순위",
-        y="개수",
-        color="우선순위",
-        title="우선순위별 업무 분포"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-else:
-    st.info("분석할 데이터가 없습니다.")
-
-# -----------------------
-# 업무 데이터 보기
-# -----------------------
-st.divider()
-
-st.subheader("🗂 업무 데이터")
-
-if tasks:
-    st.dataframe(
-        pd.DataFrame(tasks),
-        use_container_width=True
-    )
-
-    csv = pd.DataFrame(tasks).to_csv(
-        index=False
-    ).encode("utf-8-sig")
-
-    st.download_button(
-        "CSV 다운로드",
-        csv,
-        file_name="timemaster_tasks.csv",
-        mime="text/csv"
-    )
-
-else:
-    st.info("저장된 업무가 없습니다.")
+    st.rerun()
