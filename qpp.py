@@ -1,214 +1,160 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-import time
 
 st.set_page_config(
-    page_title="TimeMaster",
-    page_icon="⏰",
-    layout="wide"
+    page_title="Heart Potion Progress Tracker",
+    page_icon="❤️",
+    layout="centered"
 )
 
-# -------------------------
-# 세션 상태 초기화
-# -------------------------
+# --------------------------
+# 세션 상태
+# --------------------------
 if "tasks" not in st.session_state:
     st.session_state.tasks = []
 
-if "timer_running" not in st.session_state:
-    st.session_state.timer_running = False
+# --------------------------
+# 스타일
+# --------------------------
+st.markdown("""
+<style>
+.potion {
+    font-size: 40px;
+}
+.task-card {
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid #dddddd;
+    margin-bottom: 10px;
+}
+.complete {
+    color: green;
+    font-weight: bold;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# -------------------------
+# --------------------------
 # 제목
-# -------------------------
-st.title("⏰ TimeMaster")
-st.caption("스마트 시간관리 대시보드")
+# --------------------------
+st.title("❤️ Heart Potion Progress Tracker")
+st.caption("하트 물약병으로 과제 완성도를 관리하세요")
 
-# -------------------------
-# 사이드바
-# -------------------------
-st.sidebar.header("📋 새 업무 추가")
+# --------------------------
+# 하트 물약병 생성 함수
+# --------------------------
+def make_potion_bar(level):
+    filled = "❤️🧪" * level
+    empty = "🤍🧪" * (5 - level)
+    return filled + empty
 
-with st.sidebar.form("task_form"):
-    task_name = st.text_input("업무명")
+# --------------------------
+# 입력
+# --------------------------
+with st.form("task_form"):
 
-    priority = st.selectbox(
-        "우선순위",
-        ["높음", "중간", "낮음"]
+    task_name = st.text_input(
+        "과제 또는 업무 이름"
     )
 
-    estimated_time = st.number_input(
-        "예상 소요 시간(분)",
+    progress = st.slider(
+        "완성도",
         min_value=1,
-        value=30
+        max_value=5,
+        value=3
     )
 
-    submit = st.form_submit_button("추가")
+    submitted = st.form_submit_button("추가")
 
-    if submit:
-        if task_name.strip():
-            st.session_state.tasks.append({
-                "업무": task_name,
-                "우선순위": priority,
-                "예상시간": estimated_time,
-                "완료": False,
-                "생성일": datetime.now().strftime("%Y-%m-%d %H:%M")
-            })
-            st.success("업무가 추가되었습니다.")
-        else:
-            st.error("업무명을 입력하세요.")
+    if submitted:
 
-# -------------------------
-# 메인 레이아웃
-# -------------------------
-col1, col2 = st.columns([2, 1])
+        try:
 
-# =========================
-# 업무 관리
-# =========================
-with col1:
+            if not task_name.strip():
+                st.error("과제명을 입력하세요.")
+            else:
 
-    st.subheader("✅ 오늘의 업무")
+                st.session_state.tasks.append({
+                    "과제": task_name,
+                    "레벨": progress
+                })
 
-    if not st.session_state.tasks:
-        st.info("등록된 업무가 없습니다.")
-    else:
+                st.success("과제가 추가되었습니다.")
 
-        for idx, task in enumerate(st.session_state.tasks):
+        except Exception as e:
+            st.error(f"오류 발생: {e}")
 
-            cols = st.columns([0.1, 0.5, 0.2, 0.2])
-
-            completed = cols[0].checkbox(
-                "",
-                value=task["완료"],
-                key=f"check_{idx}"
-            )
-
-            st.session_state.tasks[idx]["완료"] = completed
-
-            cols[1].write(task["업무"])
-            cols[2].write(task["우선순위"])
-            cols[3].write(f"{task['예상시간']}분")
-
-        st.divider()
-
-        if st.button("🗑 완료된 업무 삭제"):
-            st.session_state.tasks = [
-                t for t in st.session_state.tasks
-                if not t["완료"]
-            ]
-            st.rerun()
-
-# =========================
-# 통계
-# =========================
-with col2:
-
-    st.subheader("📊 생산성 분석")
-
-    total_tasks = len(st.session_state.tasks)
-
-    completed_tasks = len([
-        t for t in st.session_state.tasks
-        if t["완료"]
-    ])
-
-    pending_tasks = total_tasks - completed_tasks
-
-    productivity_score = (
-        round((completed_tasks / total_tasks) * 100, 1)
-        if total_tasks > 0 else 0
-    )
-
-    total_time = sum(
-        t["예상시간"]
-        for t in st.session_state.tasks
-    )
-
-    st.metric("전체 업무", total_tasks)
-    st.metric("완료 업무", completed_tasks)
-    st.metric("남은 업무", pending_tasks)
-    st.metric("생산성 점수", f"{productivity_score}%")
-    st.metric("예상 총 시간", f"{total_time}분")
-
-# -------------------------
-# 업무 분석
-# -------------------------
+# --------------------------
+# 목록 표시
+# --------------------------
 st.divider()
-st.subheader("📈 업무 분석")
 
-if st.session_state.tasks:
+st.subheader("📋 과제 목록")
 
-    df = pd.DataFrame(st.session_state.tasks)
+if not st.session_state.tasks:
 
-    priority_count = (
-        df["우선순위"]
-        .value_counts()
-        .reset_index()
-    )
-
-    priority_count.columns = ["우선순위", "개수"]
-
-    st.bar_chart(
-        priority_count.set_index("우선순위")
-    )
+    st.info("등록된 과제가 없습니다.")
 
 else:
-    st.info("분석할 데이터가 없습니다.")
 
-# -------------------------
-# 포모도로 타이머
-# -------------------------
+    for idx, task in enumerate(st.session_state.tasks):
+
+        level = task["레벨"]
+        percent = level * 20
+
+        st.markdown('<div class="task-card">', unsafe_allow_html=True)
+
+        st.write(f"### {task['과제']}")
+
+        st.markdown(
+            f'<div class="potion">{make_potion_bar(level)}</div>',
+            unsafe_allow_html=True
+        )
+
+        st.write(f"완성도: {percent}%")
+
+        if level == 5:
+            st.success("🏆 완료!")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# --------------------------
+# 전체 평균
+# --------------------------
+if st.session_state.tasks:
+
+    avg = sum(
+        task["레벨"]
+        for task in st.session_state.tasks
+    ) / len(st.session_state.tasks)
+
+    avg_percent = round(avg * 20)
+
+    st.divider()
+
+    st.subheader("📊 전체 진행률")
+
+    st.metric(
+        "평균 완성도",
+        f"{avg_percent}%"
+    )
+
+    if avg_percent >= 80:
+        st.success("매우 좋은 진행 상태입니다!")
+    elif avg_percent >= 60:
+        st.info("순조롭게 진행 중입니다.")
+    else:
+        st.warning("조금 더 집중이 필요합니다.")
+
+# --------------------------
+# 전체 삭제
+# --------------------------
 st.divider()
-st.subheader("🍅 포모도로 타이머")
 
-pomodoro_minutes = st.slider(
-    "집중 시간(분)",
-    1,
-    60,
-    25
-)
-
-if st.button("타이머 시작"):
-
-    placeholder = st.empty()
+if st.button("🗑 전체 과제 삭제"):
 
     try:
-        for remaining in range(
-            pomodoro_minutes * 60,
-            -1,
-            -1
-        ):
-
-            mins = remaining // 60
-            secs = remaining % 60
-
-            placeholder.metric(
-                "남은 시간",
-                f"{mins:02d}:{secs:02d}"
-            )
-
-            time.sleep(1)
-
-        st.success("🎉 집중 시간이 종료되었습니다!")
-
+        st.session_state.tasks = []
+        st.rerun()
     except Exception as e:
-        st.error(f"타이머 오류: {e}")
-
-# -------------------------
-# 오늘의 조언
-# -------------------------
-st.divider()
-
-tips = [
-    "가장 중요한 업무부터 시작하세요.",
-    "25분 집중 + 5분 휴식을 시도해보세요.",
-    "멀티태스킹보다 단일 작업이 효율적입니다.",
-    "업무를 작은 단위로 나누면 실행하기 쉽습니다.",
-    "하루 목표를 3개만 정해보세요."
-]
-
-day_index = datetime.now().day % len(tips)
-
-st.subheader("💡 오늘의 시간관리 팁")
-st.success(tips[day_index])
+        st.error(f"삭제 오류: {e}")
