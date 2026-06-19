@@ -1,39 +1,38 @@
-```python
 import streamlit as st
-import pandas as pd
-from math import ceil
+import google.generativeai as genai
+from datetime import date
 
 st.set_page_config(
-    page_title="StudySprint",
+    page_title="시험기간 플래너 AI",
     page_icon="📚",
-    layout="centered"
+    layout="wide"
 )
 
-st.title("📚 StudySprint")
-st.subheader("시험기간 시간관리 도우미")
+st.title("📚 시험기간 플래너 AI")
+st.write("시험 과목과 범위를 입력하면 AI가 공부 시간표를 만들어줍니다.")
 
-st.write("시험 과목과 범위를 입력하면 공부 시간표를 자동으로 만들어줍니다!")
+# API 설정
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=api_key)
+except Exception:
+    st.error("GEMINI_API_KEY가 설정되지 않았습니다.")
+    st.stop()
 
-# -----------------------------
-# 이미지 업로드
-# -----------------------------
-st.header("🖼️ 공부 참고 이미지 업로드")
-
-uploaded_file = st.file_uploader(
-    "필기, 교과서, 시간표 사진 등을 업로드하세요",
-    type=["png", "jpg", "jpeg"]
+# 시험 날짜
+exam_date = st.date_input(
+    "시험 시작 날짜",
+    min_value=date.today()
 )
 
-if uploaded_file:
-    st.image(uploaded_file, caption="업로드한 이미지", use_container_width=True)
+days_left = (exam_date - date.today()).days
 
-# -----------------------------
-# 입력 영역
-# -----------------------------
-st.header("✏️ 시험 정보 입력")
+st.info(f"📅 시험까지 D-{days_left}")
 
-num_subjects = st.number_input(
-    "과목 개수",
+st.subheader("과목 입력")
+
+subject_count = st.number_input(
+    "과목 수",
     min_value=1,
     max_value=10,
     value=3
@@ -41,101 +40,102 @@ num_subjects = st.number_input(
 
 subjects = []
 
-for i in range(num_subjects):
+for i in range(subject_count):
     st.markdown(f"### 과목 {i+1}")
 
     name = st.text_input(
         f"과목명 {i+1}",
-        key=f"name_{i}"
+        key=f"name{i}"
     )
 
     scope = st.text_area(
         f"시험 범위 {i+1}",
-        key=f"scope_{i}"
+        key=f"scope{i}"
     )
 
-    difficulty = st.slider(
-        f"난이도 {i+1}",
-        min_value=1,
-        max_value=5,
-        value=3,
-        key=f"diff_{i}"
+    importance = st.slider(
+        f"중요도 {i+1}",
+        1,
+        5,
+        3,
+        key=f"importance{i}"
     )
 
     subjects.append({
         "name": name,
         "scope": scope,
-        "difficulty": difficulty
+        "importance": importance
     })
 
-days_left = st.number_input(
-    "시험까지 남은 일수",
-    min_value=1,
-    max_value=60,
-    value=7
+st.subheader("📷 시험 자료 사진")
+
+uploaded_files = st.file_uploader(
+    "교과서, 프린트, 범위표 업로드",
+    type=["png", "jpg", "jpeg"],
+    accept_multiple_files=True
 )
 
-daily_hours = st.number_input(
-    "하루 공부 가능 시간",
-    min_value=1,
-    max_value=24,
-    value=4
-)
+if uploaded_files:
+    cols = st.columns(min(len(uploaded_files), 3))
 
-# -----------------------------
-# 시간표 생성
-# -----------------------------
-if st.button("📅 공부 시간표 만들기"):
+    for idx, file in enumerate(uploaded_files):
+        with cols[idx % len(cols)]:
+            st.image(file, caption=file.name)
+
+if st.button("📝 공부 계획 생성"):
+
+    valid_subjects = [
+        s for s in subjects
+        if s["name"].strip() and s["scope"].strip()
+    ]
+
+    if not valid_subjects:
+        st.warning("과목 정보를 입력해주세요.")
+        st.stop()
 
     try:
-        valid_subjects = [
-            s for s in subjects
-            if s["name"].strip() != ""
-        ]
+        model = genai.GenerativeModel(
+            "gemini-2.5-flash-lite"
+        )
 
-        if not valid_subjects:
-            st.error("과목명을 최소 1개 이상 입력해주세요.")
-        else:
+        subject_text = ""
 
-            total_weight = sum(s["difficulty"] for s in valid_subjects)
-            total_hours = days_left * daily_hours
-
-            result = []
-
-            for s in valid_subjects:
-                allocated_hours = round(
-                    (s["difficulty"] / total_weight) * total_hours,
-                    1
-                )
-
-                per_day = round(allocated_hours / days_left, 1)
-
-                result.append({
-                    "과목": s["name"],
-                    "시험 범위": s["scope"],
-                    "총 공부 시간": f"{allocated_hours}시간",
-                    "하루 권장 시간": f"{per_day}시간"
-                })
-
-            df = pd.DataFrame(result)
-
-            st.success("시간표 생성 완료!")
-
-            st.subheader("📋 추천 공부 계획")
-            st.dataframe(df, use_container_width=True)
-
-            st.subheader("🔥 공부 팁")
-
-            st.info(
-                """
-                ✔ 어려운 과목은 오전에 공부하기  
-                ✔ 50분 공부 + 10분 휴식 추천  
-                ✔ 자기 전 암기과목 복습 추천  
-                ✔ 하루 최소 6시간 수면 유지하기
-                """
+        for s in valid_subjects:
+            subject_text += (
+                f"\n과목: {s['name']}"
+                f"\n범위: {s['scope']}"
+                f"\n중요도: {s['importance']}\n"
             )
 
-    except Exception as e:
-        st.error(f"오류가 발생했습니다: {e}")
-```
+        prompt = f"""
+너는 학습 플래너 전문가다.
 
+시험까지 {days_left}일 남았다.
+
+다음 과목 정보를 바탕으로
+현실적이고 실천 가능한 공부 계획을 작성해라.
+
+{subject_text}
+
+조건:
+1. 날짜별 공부 계획 작성
+2. 과목별 시간 배분 이유 설명
+3. 복습 일정 포함
+4. 보기 쉽게 표 형식 사용
+5. 한국어로 작성
+"""
+
+        with st.spinner("AI가 시간표를 만드는 중..."):
+
+            response = model.generate_content(prompt)
+
+            st.success("공부 계획 생성 완료!")
+
+            st.markdown(response.text)
+
+    except Exception as e:
+        st.error(f"AI 생성 중 오류 발생: {e}")
+
+st.divider()
+
+st.caption("Made with Streamlit + Gemini")
