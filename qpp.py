@@ -1,92 +1,59 @@
 import streamlit as st
-import pandas as pd
 
 st.set_page_config(
-    page_title="Heart Potion Progress Tracker",
+    page_title="Heart Completion Tracker",
     page_icon="❤️",
     layout="centered"
 )
 
-# --------------------------
+# ------------------------
 # 세션 상태
-# --------------------------
+# ------------------------
 if "tasks" not in st.session_state:
     st.session_state.tasks = []
 
-# --------------------------
-# 스타일
-# --------------------------
-st.markdown("""
-<style>
-.potion {
-    font-size: 40px;
-}
-.task-card {
-    padding: 15px;
-    border-radius: 12px;
-    border: 1px solid #dddddd;
-    margin-bottom: 10px;
-}
-.complete {
-    color: green;
-    font-weight: bold;
-}
-</style>
-""", unsafe_allow_html=True)
+# ------------------------
+# 함수
+# ------------------------
+def heart_display(level):
+    return "❤️" * level + "🤍" * (5 - level)
 
-# --------------------------
+# ------------------------
 # 제목
-# --------------------------
-st.title("❤️ Heart Potion Progress Tracker")
-st.caption("하트 물약병으로 과제 완성도를 관리하세요")
+# ------------------------
+st.title("❤️ Heart Completion Tracker")
+st.caption("하트를 클릭하여 과제의 완성도를 관리하세요")
 
-# --------------------------
-# 하트 물약병 생성 함수
-# --------------------------
-def make_potion_bar(level):
-    filled = "❤️🧪" * level
-    empty = "🤍🧪" * (5 - level)
-    return filled + empty
+# ------------------------
+# 과제 추가
+# ------------------------
+st.subheader("➕ 새 과제 추가")
 
-# --------------------------
-# 입력
-# --------------------------
-with st.form("task_form"):
+with st.form("add_task"):
 
-    task_name = st.text_input(
-        "과제 또는 업무 이름"
-    )
-
-    progress = st.slider(
-        "완성도",
-        min_value=1,
-        max_value=5,
-        value=3
-    )
+    task_name = st.text_input("과제 이름")
 
     submitted = st.form_submit_button("추가")
 
     if submitted:
 
         try:
-
             if not task_name.strip():
-                st.error("과제명을 입력하세요.")
+                st.error("과제 이름을 입력하세요.")
             else:
-
                 st.session_state.tasks.append({
-                    "과제": task_name,
-                    "레벨": progress
+                    "name": task_name,
+                    "progress": 0
                 })
-
                 st.success("과제가 추가되었습니다.")
+                st.rerun()
 
         except Exception as e:
             st.error(f"오류 발생: {e}")
 
-# --------------------------
-# 목록 표시
-# --------------------------
+# ------------------------
+# 과제 목록
+# ------------------------
 st.divider()
 
 st.subheader("📋 과제 목록")
@@ -97,58 +64,92 @@ if not st.session_state.tasks:
 
 else:
 
+    completed_count = 0
+
     for idx, task in enumerate(st.session_state.tasks):
 
-        level = task["레벨"]
-        percent = level * 20
+        st.markdown("---")
 
-        st.markdown('<div class="task-card">', unsafe_allow_html=True)
+        col1, col2 = st.columns([4, 1])
 
-        st.write(f"### {task['과제']}")
+        with col1:
+            st.markdown(f"### {task['name']}")
 
+        with col2:
+            if st.button("🗑", key=f"delete_{idx}"):
+                st.session_state.tasks.pop(idx)
+                st.rerun()
+
+        # 하트 표시
         st.markdown(
-            f'<div class="potion">{make_potion_bar(level)}</div>',
-            unsafe_allow_html=True
+            f"## {heart_display(task['progress'])}"
         )
 
-        st.write(f"완성도: {percent}%")
+        # 하트 클릭 영역
+        heart_cols = st.columns(5)
 
-        if level == 5:
+        for heart_idx in range(5):
+
+            if heart_cols[heart_idx].button(
+                "❤️",
+                key=f"heart_{idx}_{heart_idx}"
+            ):
+                st.session_state.tasks[idx]["progress"] = heart_idx + 1
+                st.rerun()
+
+        progress_percent = task["progress"] * 20
+
+        st.write(f"완성도: {progress_percent}%")
+
+        if task["progress"] == 5:
+            completed_count += 1
             st.success("🏆 완료!")
 
-        st.markdown("</div>", unsafe_allow_html=True)
-
-# --------------------------
-# 전체 평균
-# --------------------------
+# ------------------------
+# 통계
+# ------------------------
 if st.session_state.tasks:
-
-    avg = sum(
-        task["레벨"]
-        for task in st.session_state.tasks
-    ) / len(st.session_state.tasks)
-
-    avg_percent = round(avg * 20)
 
     st.divider()
 
-    st.subheader("📊 전체 진행률")
+    st.subheader("📊 진행 현황")
 
-    st.metric(
-        "평균 완성도",
-        f"{avg_percent}%"
+    total_tasks = len(st.session_state.tasks)
+
+    completed_tasks = len(
+        [
+            t for t in st.session_state.tasks
+            if t["progress"] == 5
+        ]
     )
 
-    if avg_percent >= 80:
-        st.success("매우 좋은 진행 상태입니다!")
-    elif avg_percent >= 60:
-        st.info("순조롭게 진행 중입니다.")
-    else:
-        st.warning("조금 더 집중이 필요합니다.")
+    average_progress = round(
+        sum(
+            t["progress"]
+            for t in st.session_state.tasks
+        ) / total_tasks * 20
+    )
 
-# --------------------------
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric(
+        "전체 과제",
+        total_tasks
+    )
+
+    col2.metric(
+        "완료 과제",
+        completed_tasks
+    )
+
+    col3.metric(
+        "평균 완성도",
+        f"{average_progress}%"
+    )
+
+# ------------------------
 # 전체 삭제
-# --------------------------
+# ------------------------
 st.divider()
 
 if st.button("🗑 전체 과제 삭제"):
@@ -156,5 +157,6 @@ if st.button("🗑 전체 과제 삭제"):
     try:
         st.session_state.tasks = []
         st.rerun()
+
     except Exception as e:
         st.error(f"삭제 오류: {e}")
